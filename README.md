@@ -1,6 +1,8 @@
-# 🏠 家居選購 Agent
+# Choosy
 
 用 AI 即時搜尋台灣電器／傢俱的比價、規格比對與論壇評價。
+
+**Demo** → https://leewanhsuan.github.io/Choosy/
 
 ---
 
@@ -17,34 +19,50 @@
 
 ## 使用方式
 
-### 線上版（推薦）
+### 方式一：線上版（免安裝）
 
-1. 申請 [Anthropic API Key](https://console.anthropic.com)（新帳號有 $5 免費額度，約可查詢 300+ 次）
-2. 開啟專案網頁
-3. 點右上角 **⚙️** 填入你的 API Key
+1. 前往 [Anthropic Console](https://console.anthropic.com) 申請 API Key
+2. 開啟 https://leewanhsuan.github.io/Choosy/
+3. 點右上角 **⚙️** → 貼上你的 API Key → 儲存
 4. 開始使用
 
-> API Key 只存在你自己的瀏覽器 localStorage，不會上傳至任何伺服器。
+> API Key 只存在你的瀏覽器 localStorage，不會上傳至任何伺服器。
 
-### 本地執行
+### 方式二：Clone 到本地執行
 
 ```bash
-git clone https://github.com/你的帳號/home-agent.git
-cd home-agent
+git clone git@github.com:Leewanhsuan/Choosy.git
+cd Choosy
 npm install
+```
+
+建立 `.env.local` 檔案，填入你的 API Key：
+
+```bash
+VITE_ANTHROPIC_KEY=sk-ant-你的key
+```
+
+啟動開發伺服器：
+
+```bash
 npm run dev
 ```
 
-開啟 http://localhost:5173，同樣點 ⚙️ 填入 API Key 即可。
+開啟 http://localhost:5173 即可使用。
+
+> 本地模式下會優先使用 `.env.local` 的 Key，不需要在網頁上手動設定。
+> 如果沒有 `.env.local`，也可以跟線上版一樣點 ⚙️ 手動輸入。
 
 ---
 
 ## 技術架構
 
 - **Frontend**：React + Vite
-- **AI**：Claude Sonnet 4（Anthropic API）
-- **搜尋**：Anthropic Web Search Tool（即時搜尋台灣各大電商與論壇）
+- **AI**：Claude Sonnet 4（Anthropic API + Web Search）
+- **Markdown 渲染**：react-markdown + remark-gfm
+- **部署**：GitHub Pages（gh-pages）
 - **資料儲存**：無後端，所有狀態存於瀏覽器 localStorage
+- **快取**：相同查詢結果快取 1 小時，減少 token 消耗
 
 ---
 
@@ -52,7 +70,7 @@ npm run dev
 
 每次查詢約消耗 **NT$0.4–0.5**（約 $0.014 USD）。
 
-建議在 [Anthropic Console](https://console.anthropic.com/settings/limits) 的 **Settings → Limits** 設定每月消費上限，避免意外超支。
+建議在 [Anthropic Console → Settings → Limits](https://console.anthropic.com/settings/limits) 設定每月消費上限，避免意外超支。
 
 ---
 
