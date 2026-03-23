@@ -80,7 +80,7 @@ body {
   width: 1126px;
   max-width: 100%;
   margin: 0 auto;
-  text-align: center;
+  text-align: left;
   border-inline: 1px solid var(--border);
   min-height: 100svh;
   display: flex;
@@ -137,14 +137,14 @@ code {
 .result-markdown h2,
 .result-markdown h3 {
   font-size: 15px;
-  margin: 16px 0 8px;
+  margin: 14px 0 6px;
   color: var(--color-text-primary, var(--text-h));
 }
 .result-markdown h1 { font-size: 17px; }
 .result-markdown h2 { font-size: 16px; }
 
 .result-markdown p {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
 }
 
 .result-markdown ul,
@@ -153,13 +153,28 @@ code {
   padding-left: 20px;
 }
 
+.result-markdown li {
+  margin-bottom: 2px;
+}
+
+.result-markdown li p {
+  margin: 0;
+  display: inline;
+}
+
 .result-markdown table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   margin: 8px 0 12px;
-  display: block;
+  display: table;
+  table-layout: auto;
   overflow-x: auto;
+}
+
+.result-markdown .table-wrap {
+  overflow-x: auto;
+  margin: 8px 0 12px;
 }
 
 .result-markdown thead {
@@ -171,12 +186,14 @@ code {
   border: 1px solid var(--color-border-secondary, #e5e4e7);
   padding: 7px 12px;
   text-align: left;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .result-markdown th {
   font-weight: 600;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .result-markdown tr:nth-child(even) {
@@ -184,6 +201,10 @@ code {
 }
 
 @media (max-width: 480px) {
+  .result-markdown table {
+    display: block;
+    overflow-x: auto;
+  }
   .result-markdown th,
   .result-markdown td {
     padding: 5px 8px;

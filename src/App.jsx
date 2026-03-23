@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useContext, createContext, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -6,12 +6,12 @@ import remarkGfm from "remark-gfm";
 function Badge({ children, color = "gray" }) {
   const map = {
     gray:   { bg: "var(--color-background-tertiary)", fg: "var(--color-text-secondary)" },
-    blue:   { bg: "#e6f1fb", fg: "#185fa5" },
+    blue:   { bg: "#e8edff", fg: "#5170ff" },
     green:  { bg: "#eaf3de", fg: "#3b6d11" },
     amber:  { bg: "#faeeda", fg: "#854f0b" },
     red:    { bg: "#fcebeb", fg: "#a32d2d" },
-    teal:   { bg: "#e1f5ee", fg: "#0f6e56" },
-    purple: { bg: "#eeedfe", fg: "#534ab7" },
+    teal:   { bg: "#e8edff", fg: "#5170ff" },
+    purple: { bg: "#e8edff", fg: "#5170ff" },
   };
   const { bg, fg } = map[color] || map.gray;
   return <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 20, fontWeight: 500,
@@ -21,8 +21,8 @@ function Badge({ children, color = "gray" }) {
 function Tab({ label, active, onClick }) {
   return (
     <button onClick={onClick} style={{ padding: "9px 16px", border: "none", background: "none",
-      borderBottom: active ? "2px solid #185fa5" : "2px solid transparent",
-      color: active ? "#185fa5" : "var(--color-text-secondary)",
+      borderBottom: active ? "2px solid #5170ff" : "2px solid transparent",
+      color: active ? "#5170ff" : "var(--color-text-secondary)",
       fontWeight: active ? 500 : 400, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
       {label}
     </button>
@@ -31,7 +31,7 @@ function Tab({ label, active, onClick }) {
 
 function Spinner() {
   return <span style={{ display: "inline-block", width: 13, height: 13,
-    border: "2px solid #ccc", borderTop: "2px solid #185fa5",
+    border: "2px solid #ccc", borderTop: "2px solid #5170ff",
     borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />;
 }
 
@@ -44,7 +44,7 @@ function Input({ value, onChange, placeholder, onEnter, style = {} }) {
       outline: "none", minWidth: 0, boxSizing: "border-box", ...style }} />;
 }
 
-function PrimaryBtn({ onClick, disabled, loading, children, color = "#185fa5" }) {
+function PrimaryBtn({ onClick, disabled, loading, children, color = "#5170ff" }) {
   return (
     <button onClick={onClick} disabled={disabled || loading} style={{ padding: "9px 20px", borderRadius: 9,
       border: "none", background: disabled ? "var(--color-border-secondary)" : color,
@@ -53,6 +53,85 @@ function PrimaryBtn({ onClick, disabled, loading, children, color = "#185fa5" })
       {loading && <Spinner />}{children}
     </button>
   );
+}
+
+// Fix broken markdown from AI responses:
+// 1. Tables: merge rows that have too few columns back into the previous row
+// 2. Lists: merge empty bullet lines (- \n text) into single list items
+// 3. Lists: merge orphaned continuation lines into the previous bullet
+function fixMarkdown(text) {
+  const lines = text.split("\n");
+  const out = [];
+  let colCount = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // ── Table fixes ──
+    // Detect separator row like |---|---|---|
+    if (/^\|[\s\-:]+(\|[\s\-:]+)+\|?\s*$/.test(trimmed)) {
+      colCount = (trimmed.match(/\|/g) || []).length - 1;
+      out.push(line);
+      continue;
+    }
+
+    if (colCount > 0 && trimmed.startsWith("|")) {
+      const pipes = (trimmed.match(/\|/g) || []).length;
+      if (pipes >= colCount) {
+        out.push(line);
+      } else {
+        // Broken row — merge into previous table row
+        if (out.length > 0 && out[out.length - 1].trim().startsWith("|")) {
+          const fragment = trimmed.replace(/^\|/, "").replace(/\|$/, "").trim();
+          if (fragment) {
+            const prev = out[out.length - 1];
+            const lastPipe = prev.lastIndexOf("|");
+            if (lastPipe > 0) {
+              out[out.length - 1] = prev.slice(0, lastPipe).trimEnd() + " " + fragment + " " + prev.slice(lastPipe);
+            }
+          }
+        } else {
+          out.push(line);
+        }
+      }
+      continue;
+    }
+
+    // Reset table context when leaving table
+    if (colCount > 0 && trimmed !== "" && !trimmed.startsWith("|")) {
+      colCount = 0;
+    }
+
+    // ── List fixes ──
+    // Case 1: empty bullet "- " or "* " with content on the NEXT line
+    if (/^[-*]\s*$/.test(trimmed) && i + 1 < lines.length) {
+      const next = lines[i + 1].trim();
+      // Skip blank lines after empty bullet
+      if (next === "") { i++; continue; }
+      // Merge next non-empty line into this bullet
+      if (!next.startsWith("-") && !next.startsWith("*") && !next.startsWith("#") && !next.startsWith("|")) {
+        out.push("- " + next);
+        i++; // skip next line since we merged it
+        continue;
+      }
+    }
+
+    // Case 2: line after a bullet that's a plain continuation (not a new bullet/heading/table)
+    // e.g. previous: "- " (empty), this line is orphaned text
+    if (out.length > 0 && trimmed !== "" && !trimmed.startsWith("-") && !trimmed.startsWith("*") &&
+        !trimmed.startsWith("#") && !trimmed.startsWith("|") && !trimmed.startsWith(">")) {
+      const prevTrimmed = out[out.length - 1].trim();
+      // If previous line was an empty bullet we already handled, check if it's "- "
+      if (/^[-*]\s*$/.test(prevTrimmed)) {
+        out[out.length - 1] = "- " + trimmed;
+        continue;
+      }
+    }
+
+    out.push(line);
+  }
+  return out.join("\n");
 }
 
 // Result renderer — renders AI markdown output with proper tables, headings, etc.
@@ -65,9 +144,10 @@ function ResultBlock({ text, loading, emptyMsg = "結果將顯示於此" }) {
     <div style={{ padding: "24px 0", color: "var(--color-text-tertiary)", fontSize: 13,
       textAlign: "center" }}>{emptyMsg}</div>
   );
+  const fixed = fixMarkdown(text);
   return (
-    <div className="result-markdown" style={{ fontSize: 14, lineHeight: 1.8, color: "var(--color-text-primary)" }}>
-      <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
+    <div className="result-markdown" style={{ fontSize: 14, lineHeight: 1.7, color: "var(--color-text-primary)" }}>
+      <Markdown remarkPlugins={[remarkGfm]}>{fixed}</Markdown>
     </div>
   );
 }
@@ -128,7 +208,7 @@ async function searchClaude(prompt, apiKey) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
+      max_tokens: 4096,
       tools: [{ type: "web_search_20250305", name: "web_search" }],
       messages: [{ role: "user", content: prompt }],
     }),
@@ -153,7 +233,7 @@ function KeyModal({ onClose, apiKey, onSave }) {
         <p style={{ fontSize: 13, color: "var(--color-text-secondary)", margin: "0 0 14px", lineHeight: 1.6 }}>
           Key 只存在你的瀏覽器 localStorage，不會傳送到任何伺服器。
           前往 <a href="https://console.anthropic.com" target="_blank" rel="noreferrer"
-            style={{ color: "#185fa5" }}>console.anthropic.com</a> 取得。
+            style={{ color: "#5170ff" }}>console.anthropic.com</a> 取得。
         </p>
         <input value={val} onChange={e => setVal(e.target.value)}
           placeholder="sk-ant-..."
@@ -167,7 +247,7 @@ function KeyModal({ onClose, apiKey, onSave }) {
             border: "1px solid var(--color-border-secondary)", background: "none",
             color: "var(--color-text-secondary)", fontSize: 13, cursor: "pointer" }}>取消</button>
           <button onClick={() => { onSave(val); onClose(); }} style={{ padding: "7px 16px",
-            borderRadius: 8, border: "none", background: "#185fa5", color: "#fff",
+            borderRadius: 8, border: "none", background: "#5170ff", color: "#fff",
             fontSize: 13, fontWeight: 500, cursor: "pointer" }}>儲存</button>
         </div>
       </div>
@@ -230,12 +310,12 @@ function SpecTab() {
         <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 8 }}>
           {types.map(t => (
             <div key={t} style={{ display: "flex", alignItems: "center",
-              border: spec.type === t ? "1.5px solid #185fa5" : "1px solid var(--color-border-secondary)",
-              background: spec.type === t ? "#e6f1fb" : "none",
+              border: spec.type === t ? "1.5px solid #5170ff" : "1px solid var(--color-border-secondary)",
+              background: spec.type === t ? "#e8edff" : "none",
               borderRadius: 20, overflow: "hidden" }}>
               <button onClick={() => set("type", t)} style={{ padding: "5px 10px 5px 13px",
                 background: "none", border: "none", cursor: "pointer", fontSize: 13,
-                color: spec.type === t ? "#185fa5" : "var(--color-text-secondary)",
+                color: spec.type === t ? "#5170ff" : "var(--color-text-secondary)",
                 fontWeight: spec.type === t ? 500 : 400 }}>{t}</button>
               {!DEFAULT_TYPES.includes(t) && (
                 <button onClick={() => { remove(t); if (spec.type === t) set("type", ""); }}
@@ -278,7 +358,7 @@ function SpecTab() {
 
       {(loading || result) && (
         <div style={{ marginTop: 16, padding: 16, borderRadius: 10,
-          background: "var(--color-background-secondary)", borderLeft: "3px solid #185fa5" }}>
+          background: "var(--color-background-secondary)", borderLeft: "3px solid #5170ff" }}>
           <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 8 }}>
             🤖 AI 規格推薦（Web Search）
           </div>
@@ -308,13 +388,32 @@ function CompareTab() {
     const prompt = `你是台灣家電比較專家。請搜尋以下商品的詳細資訊並做完整比較：
 ${targets.map((t, i) => `商品 ${i + 1}：${t}`).join("\n")}
 
-請輸出：
-一、規格比對表（列出：尺寸/容量、主要規格、能效等級、特色功能、台灣售價範圍）
-二、各自優點（每款 2-3 點）
-三、各自缺點或限制（每款 1-2 點）
-四、總結建議：哪種使用情境適合哪款
+請用以下格式輸出（不要使用 markdown 表格）：
 
-用繁體中文，結構清楚，規格比對請用對齊的格式方便比較。`;
+## 一、規格逐項比對
+
+針對每個規格項目，列出每款商品的值，格式如下：
+
+**尺寸/重量**
+- 商品A：值
+- 商品B：值
+
+**主要技術**
+- 商品A：值
+- 商品B：值
+
+（依此類推，至少包含：尺寸/重量、主要技術、處理器/馬達、吸力/效能、能效等級、特色功能、台灣售價範圍）
+
+## 二、各自優點
+每款 2-3 點
+
+## 三、各自缺點或限制
+每款 1-2 點
+
+## 四、總結建議
+哪種使用情境適合哪款
+
+用繁體中文，條列清楚。`;
     try { setResult(await searchClaude(prompt, apiKey)); }
     catch { setResult("比較失敗，請稍後再試。"); }
     setLoading(false);
@@ -379,7 +478,7 @@ ${targets.map((t, i) => `商品 ${i + 1}：${t}`).join("\n")}
 
       {(loading || result) && (
         <div style={{ padding: 16, borderRadius: 10,
-          background: "var(--color-background-secondary)", borderLeft: "3px solid #534ab7" }}>
+          background: "var(--color-background-secondary)", borderLeft: "3px solid #5170ff" }}>
           <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 8 }}>
             ⚡ 規格比對結果（Web Search）
           </div>
@@ -433,9 +532,9 @@ function ReviewTab() {
           {Object.entries(srcLabel).map(([k, v]) => (
             <button key={k} onClick={() => toggleSrc(k)} style={{ padding: "5px 13px", borderRadius: 20,
               cursor: "pointer", fontSize: 12,
-              border: sources.includes(k) ? "1.5px solid #534ab7" : "1px solid var(--color-border-secondary)",
-              background: sources.includes(k) ? "#eeedfe" : "none",
-              color: sources.includes(k) ? "#534ab7" : "var(--color-text-secondary)",
+              border: sources.includes(k) ? "1.5px solid #5170ff" : "1px solid var(--color-border-secondary)",
+              background: sources.includes(k) ? "#e8edff" : "none",
+              color: sources.includes(k) ? "#5170ff" : "var(--color-text-secondary)",
               fontWeight: sources.includes(k) ? 500 : 400 }}>{v}</button>
           ))}
         </div>
@@ -446,7 +545,7 @@ function ReviewTab() {
           placeholder="輸入商品名稱（e.g. Dyson V15、LG C3 OLED）"
           style={{ flex: 1 }} />
         <PrimaryBtn onClick={run} disabled={!target.trim() || sources.length === 0}
-          loading={loading} color="#534ab7">💬 查評價</PrimaryBtn>
+          loading={loading} color="#5170ff">💬 查評價</PrimaryBtn>
       </div>
 
       {/* Quick links */}
@@ -460,7 +559,7 @@ function ReviewTab() {
 
       {(loading || result) && (
         <div style={{ padding: 16, borderRadius: 10,
-          background: "var(--color-background-secondary)", borderLeft: "3px solid #534ab7" }}>
+          background: "var(--color-background-secondary)", borderLeft: "3px solid #5170ff" }}>
           <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 8 }}>
             💬 論壇評價整理（{sources.map(s => srcLabel[s]).join(" / ")}）
           </div>
@@ -483,17 +582,30 @@ function PriceTab() {
     setLoading(true); setResult("");
     const prompt = `你是台灣購物比價助理。請搜尋「${query}」在台灣各大電商的最新價格資訊。
 
-請整理成清楚的比較格式：
-【平台比價表】
-各平台（PChome、momo購物、蝦皮、Yahoo購物、燦坤、全國電子）的現售價格，格式：
-平台 | 商品名稱（型號） | 售價 | 備註（有無贈品/促銷）
+請用以下格式輸出（不要使用 markdown 表格）：
 
-【價格區間分析】
-- 最低價：哪裡、多少
+## 各平台價格
+
+針對每個平台，列出找到的價格資訊：
+
+**PChome**
+- 商品名稱：xxx
+- 售價：NT$xxx
+- 備註：（贈品/促銷資訊）
+
+**momo購物**
+- 商品名稱：xxx
+- 售價：NT$xxx
+- 備註：（贈品/促銷資訊）
+
+（依此類推，包含：蝦皮、Yahoo購物、燦坤、全國電子等有找到的平台）
+
+## 價格分析
+- 最低價：哪個平台、多少錢
 - 建議購買平台與原因
 - 近期是否有促銷節慶值得等待
 
-繁體中文，表格對齊清楚。`;
+繁體中文，條列清楚。`;
     try { setResult(await searchClaude(prompt, apiKey)); }
     catch { setResult("搜尋失敗，請稍後再試。"); }
     setLoading(false);
@@ -509,7 +621,7 @@ function PriceTab() {
         <Input value={query} onChange={setQuery} onEnter={run}
           placeholder="輸入商品（e.g. Dyson V15 Detect SV22）"
           style={{ flex: 1 }} />
-        <PrimaryBtn onClick={run} disabled={!query.trim()} loading={loading} color="#0f6e56">
+        <PrimaryBtn onClick={run} disabled={!query.trim()} loading={loading} color="#5170ff">
           🔍 查價格
         </PrimaryBtn>
       </div>
@@ -525,7 +637,7 @@ function PriceTab() {
 
       {(loading || result) && (
         <div style={{ padding: 16, borderRadius: 10,
-          background: "var(--color-background-secondary)", borderLeft: "3px solid #0f6e56" }}>
+          background: "var(--color-background-secondary)", borderLeft: "3px solid #5170ff" }}>
           <div style={{ fontSize: 11, color: "var(--color-text-tertiary)", marginBottom: 8 }}>
             🔍 各平台價格比較（Web Search）
           </div>
@@ -571,9 +683,8 @@ export default function App() {
 
         <div style={{ padding: "18px 0 0" }}>
           <div className="header-row" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 3 }}>
-            <img src={theme === "dark" ? "/icons_dark.png" : "/icons_light.png"}
-              alt="HOMEY" style={{ width: 28, height: 28 }} />
-            <span style={{ fontSize: 17, fontWeight: 500 }}>HOMEY</span>
+            <img src={`${import.meta.env.BASE_URL}${theme === "dark" ? "icons_dark.png" : "icons_light.png"}`}
+              alt="Choosy" style={{ width: 80, height: 80 }} />
             <Badge color="purple">AI + Web Search</Badge>
             <div className="header-right" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
               {key
