@@ -84,7 +84,7 @@ function useTheme() {
 }
 
 // ── API Key hook ──────────────────────────────────────────────────────────────
-const ENV_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "";
+const ENV_KEY = import.meta.env.DEV ? (import.meta.env.VITE_ANTHROPIC_KEY || "") : "";
 
 function useApiKey() {
   const [key, setKey] = useState(() => ENV_KEY || localStorage.getItem("anthropic_key") || "");
@@ -117,9 +117,15 @@ async function searchClaude(prompt, apiKey) {
   const cached = getCached(prompt);
   if (cached) return cached;
 
-  const res = await fetch("/api/anthropic/v1/messages", {
+  const apiUrl = import.meta.env.DEV ? "/api/anthropic/v1/messages" : "https://api.anthropic.com/v1/messages";
+  const res = await fetch(apiUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      ...(import.meta.env.DEV ? {} : { "anthropic-dangerous-direct-browser-access": "true" }),
+    },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1000,
